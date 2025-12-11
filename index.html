@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kasir Sekolah — SD PLUS DARUSSALAM</title>
+  <meta name="description" content="Aplikasi kasir sekolah: import Excel, input pembayaran, cetak kwitansi, export rekap. Deploy ke GitHub Pages." />
+  <style>
+    :root{--bg:#0b1220;--card:#071226;--muted:#cbd5e1;--accent:#b6d7a8;--accent-2:#7fbf7f;--glass:rgba(255,255,255,0.03)}
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,Arial;margin:0;background:linear-gradient(180deg,var(--bg),#021021);color:#e6eef6}
+    .wrap{max-width:1100px;margin:24px auto;padding:18px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:56px;height:56px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;overflow:hidden;background:var(--accent)}
+    .logo img{width:100%;height:100%;object-fit:contain}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:14px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    .muted{color:var(--muted)}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    input[type=file]{display:block}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.03);text-align:left}
+    .btn{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#021; padding:8px 12px;border-radius:8px;text-decoration:none;border:none;cursor:pointer}
+    .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+    .right{margin-left:auto}
+    .search{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    .small{font-size:13px}
+    .danger{background:#ef4444;color:white}
+    .ok{background:#10b981;color:white}
+    .note{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);color:var(--muted)}
+    input,select,textarea{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+    @media (max-width:820px){header{flex-direction:column;align-items:flex-start}}
+  </style>
+  <!-- SheetJS for Excel read/write -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo"><img src="assets/logo.png" alt="logo" onerror="this.style.display='none'"/></div>
+        <div>
+          <div style="font-weight:700">SD PLUS DARUSSALAM</div>
+          <div class="muted small">Pembayaran | Kwitansi | Rekap Excel</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="mode" class="muted small">Mode: <strong id="modeLabel">Public</strong></div>
+        <button id="loginBtn" class="btn">Masuk Admin</button>
+        <button id="logoutBtn" class="btn btn-ghost" style="display:none">Logout</button>
+      </div>
+    </header>
+
+    <section style="margin-top:18px;display:grid;grid-template-columns:1fr 360px;gap:16px">
+      <div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <strong>Data Pembayaran</strong>
+              <div class="muted small">Tabel menampilkan semua pembayaran. Klik baris untuk edit (Admin).</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="search" class="search" placeholder="Cari nama / id / kelas / NISN" />
+              <button id="exportBtn" class="btn">Download Rekap (Excel)</button>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;overflow:auto;max-height:520px">
+            <table id="paymentsTable">
+              <thead>
+                <tr><th>ID</th><th>NISN</th><th>Nama</th><th>Kelas</th><th>Jumlah Tagihan</th><th>Terbayar</th><th>Tanggal</th><th>Aksi</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="margin-top:12px" class="card">
+          <strong>Import Excel</strong>
+          <div class="muted small">Upload file Excel (xlsx) — format wajib: id, nisn, student, class, amount_due, amount_paid, date, note</div>
+          <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+            <input id="fileInput" type="file" accept=".xlsx,.xls" />
+            <button id="importBtn" class="btn">Import</button>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <button id="downloadTemplate" class="btn btn-ghost">Download Template (Excel)</button>
+            <button id="downloadSample" class="btn btn-ghost">Download Sample (Excel)</button>
+            <button id="clearBtn" class="btn danger">Hapus Semua (Admin)</button>
+          </div>
+          <div id="importErrors" class="note" style="margin-top:8px;display:none;white-space:pre-wrap"></div>
+        </div>
+
+        <div style="margin-top:12px" class="card">
+          <strong>Public View</strong>
+          <div class="muted small">Halaman publik menampilkan status pembayaran (read-only). Bagikan link GitHub Pages Anda.</div>
+          <div style="margin-top:8px">
+            <code id="publicLink" class="muted small">[Simpan link GitHub Pages Anda]/</code>
+          </div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="card" id="adminPanel" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <strong>Panel Kasir (Admin)</strong>
+            <span id="adminBadge" class="muted small">Status: <strong id="adminStatus">—</strong></span>
+          </div>
+
+          <div class="muted small" style="margin-top:8px">Input pembayaran baru / edit data / cetak kwitansi. Juga atur kata sandi admin.</div>
+
+          <div style="margin-top:12px;display:grid;gap:8px">
+            <input id="inp_id" placeholder="ID siswa (unik)" />
+            <input id="inp_nisn" placeholder="NISN (untuk pencarian)" />
+            <input id="inp_student" placeholder="Nama siswa" />
+            <input id="inp_class" placeholder="Kelas" />
+            <input id="inp_due" type="number" placeholder="Jumlah tagihan" />
+            <input id="inp_paid" type="number" placeholder="Jumlah yang dibayar" />
+            <input id="inp_date" type="date" />
+            <input id="inp_note" placeholder="Catatan" />
+            <div style="display:flex;gap:8px">
+              <button id="addBtn" class="btn">Simpan / Tambah</button>
+              <button id="payBtn" class="btn btn-ghost">Catat Pembayaran</button>
+              <button id="printBtn" class="btn">Cetak Kwitansi</button>
+            </div>
+
+            <hr style="border:none;border-top:1px solid rgba(255,255,255,0.03)" />
+
+            <div>
+              <strong>Admin: Atur Kata Sandi</strong>
+              <div class="muted small">Jika belum diset, Anda wajib membuat kata sandi sebelum menggunakan fitur admin.</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <input id="newPwd" type="password" placeholder="Kata sandi baru" />
+                <input id="newPwdConfirm" type="password" placeholder="Ulangi kata sandi" />
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button id="setPwdBtn" class="btn ok">Set / Ubah Kata Sandi</button>
+                <button id="clearPwdBtn" class="btn btn-ghost">Hapus Kata Sandi (Reset)</button>
+              </div>
+              <div id="pwdMsg" class="muted small" style="margin-top:8px"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <strong>Petunjuk Cepat</strong>
+          <ol class="muted small">
+            <li>Download template/sample Excel — isi sesuai header lalu upload.</li>
+            <li>Jika pertama kali, masuk ke Admin dan set kata sandi pada panel Admin.</li>
+            <li>Gunakan Cetak Kwitansi untuk bukti bayar, Download Rekap untuk file Excel.</li>
+          </ol>
+        </div>
+      </aside>
+    </section>
+
+    <footer style="margin-top:18px;text-align:center;color:var(--muted)">&copy; <span id="year"></span> Kasir Sekolah — Demo (hosted on GitHub Pages)</footer>
+  </div>
+
+<script>
+// STORAGE KEYS
+const STORAGE_KEY = 'kasir_sekolah_data_v3';
+const STORAGE_ADMIN_HASH = 'kasir_sekolah_admin_hash_v1';
+
+let payments = [];
+let isAdmin = false;
+
+const $ = id => document.getElementById(id);
+
+// --- crypto helpers (SHA-256) ---
+async function sha256(str){
+  const enc = new TextEncoder();
+  const buf = enc.encode(str);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function setAdminPassword(pwd){
+  const h = await sha256(pwd);
+  localStorage.setItem(STORAGE_ADMIN_HASH, h);
+}
+async function clearAdminPassword(){
+  localStorage.removeItem(STORAGE_ADMIN_HASH);
+}
+async function verifyAdminPassword(pwd){
+  const stored = localStorage.getItem(STORAGE_ADMIN_HASH);
+  if(!stored) return false;
+  const h = await sha256(pwd);
+  return h === stored;
+}
+function adminExists(){
+  return !!localStorage.getItem(STORAGE_ADMIN_HASH);
+}
+
+// load/save payments
+function loadFromStorage(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  payments = raw ? JSON.parse(raw) : [];
+}
+function saveToStorage(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payments));
+}
+
+function formatCurrency(n){
+  if(!n && n!==0) return '-';
+  return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(Number(n));
+}
+
+function renderTable(filter=''){
+  const tbody = document.querySelector('#paymentsTable tbody');
+  tbody.innerHTML = '';
+  const q = filter.trim().toLowerCase();
+  payments.forEach((p, idx) => {
+    if(q){
+      const combined = `${p.id||''} ${p.nisn||''} ${p.student||''} ${p.class||''} ${p.note||''}`.toLowerCase();
+      if(!combined.includes(q)) return;
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${p.id||''}</td>
+      <td data-field="nisn">${p.nisn||''}</td>
+      <td>${p.student||''}</td>
+      <td>${p.class||''}</td>
+      <td>${formatCurrency(p.amount_due)}</td>
+      <td>${formatCurrency(p.amount_paid)}</td>
+      <td>${p.date||''}</td>
+      <td>${isAdmin ? `<button data-idx="${idx}" class="btn" onclick="editRow(${idx})">Edit</button> <button class=\"btn btn-ghost\" onclick=\"deleteRow(${idx})\">Hapus</button>` : '<span class="muted">-</span>'}</td>
+    `;
+    tr.addEventListener('click', ()=>{ if(isAdmin) editRow(idx); });
+    tbody.appendChild(tr);
+  });
+}
+
+// --- Excel helpers ---
+function downloadWorkbook(wb, filename){
+  const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([wbout], {type:'application/octet-stream'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+}
+
+function generateTemplate(){
+  const headers = ['id','nisn','student','class','amount_due','amount_paid','date','note'];
+  const ws = XLSX.utils.aoa_to_sheet([headers]);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'template');
+  downloadWorkbook(wb, 'template_kasir_sekolah.xlsx');
+}
+
+function generateSample(){
+  const rows = [
+    {id:'S0001', nisn:'1234567890', student:'Budi Santoso', class:'7A', amount_due:500000, amount_paid:0, date:'2025-01-10', note:'SPP Jan'},
+    {id:'S0002', nisn:'0987654321', student:'Siti Aminah', class:'8B', amount_due:500000, amount_paid:200000, date:'2025-01-12', note:'Pelunasan dikredit'},
+  ];
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'sample');
+  downloadWorkbook(wb, 'sample_kasir_sekolah.xlsx');
+}
+
+function validateExcelHeaders(obj){
+  const required = ['id','nisn','student','class','amount_due','amount_paid','date','note'];
+  const keys = Object.keys(obj[0]||{}).map(k=>k.toString().toLowerCase());
+  const missing = required.filter(r=>!keys.includes(r));
+  return missing;
+}
+
+function importFromFile(file){
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, {type: 'array'});
+      const first = workbook.Sheets[workbook.SheetNames[0]];
+      let arr = XLSX.utils.sheet_to_json(first, {defval: ''});
+      if(!arr.length){ showImportErrors(['File kosong atau tidak ada data']); return; }
+      // normalize keys to lower-case
+      arr = arr.map(r=>{
+        const row = {};
+        Object.keys(r).forEach(k=>{ row[k.toString().toLowerCase().trim()] = r[k]; });
+        return {
+          id: String(row.id || ''),
+          nisn: String(row.nisn || row.NISN || ''),
+          student: row.student || row.nama || '',
+          class: row.class || row.kelas || '',
+          amount_due: Number(row.amount_due || row.amount || 0),
+          amount_paid: Number(row.amount_paid || row.paid || 0),
+          date: row.date || row.tanggal || '',
+          note: row.note || ''
+        };
+      });
+      // validate headers
+      const missing = validateExcelHeaders(arr);
+      if(missing.length){ showImportErrors(['Header kurang: ' + missing.join(', ')]); return; }
+      // basic row validation
+      const errors = [];
+      arr.forEach((r,i)=>{
+        if(!r.id) errors.push(`Baris ${i+2}: id kosong`);
+        if(!r.student) errors.push(`Baris ${i+2}: student kosong`);
+        if(isNaN(r.amount_due)) errors.push(`Baris ${i+2}: amount_due bukan angka`);
+      });
+      if(errors.length){ showImportErrors(errors); return; }
+      // merge: if id exists update, else push
+      let newCount=0, updated=0;
+      arr.forEach(r=>{
+        const idx = payments.findIndex(p=>p.id===r.id);
+        if(idx>=0){ payments[idx] = Object.assign({}, payments[idx], r); updated++; }
+        else { payments.push(r); newCount++; }
+      });
+      saveToStorage(); renderTable($('search').value);
+      showImportErrors(['Import selesai. Baru: '+newCount+', Diupdate: '+updated], true);
+    }catch(err){ showImportErrors(['Terjadi kesalahan membaca file: '+err.message]); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showImportErrors(arr, ok){
+  const el = $('importErrors');
+  el.style.display = 'block';
+  el.style.background = ok ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)';
+  el.style.color = ok ? '#10b981' : '#ef4444';
+  el.textContent = Array.isArray(arr) ? arr.join('\n') : String(arr);
+  setTimeout(()=>{ el.style.display='none'; }, 8000);
+}
+
+// --- Admin functions ---
+async function enterAdmin(){
+  if(!adminExists()){
+    alert('Belum ada kata sandi admin. Silakan set kata sandi pada panel Admin setelah menekan \"Masuk Admin\".');
+    // allow user to open admin panel to set password.
+    isAdmin = false; updateMode(); document.getElementById('adminPanel').style.display = 'block';
+    return;
+  }
+  const pwd = prompt('Masukkan kata sandi admin:');
+  if(pwd===null) return;
+  const ok = await verifyAdminPassword(pwd);
+  if(ok){ isAdmin = true; updateMode(); alert('Berhasil masuk sebagai admin'); }
+  else alert('Kata sandi salah');
+}
+function logoutAdmin(){ isAdmin=false; updateMode(); }
+
+function updateMode(){
+  $('modeLabel').textContent = isAdmin ? 'Admin' : 'Public';
+  document.getElementById('adminPanel').style.display = isAdmin ? 'block' : (adminExists()? 'none':'block');
+  document.getElementById('loginBtn').style.display = isAdmin ? 'none' : 'inline-block';
+  document.getElementById('logoutBtn').style.display = isAdmin ? 'inline-block' : 'none';
+  $('adminStatus').textContent = adminExists() ? (isAdmin? 'Masuk' : 'Tersedia') : 'Belum diset';
+  renderTable($('search').value);
+}
+
+function addOrUpdateFromForm(){
+  if(!isAdmin){ alert('Hanya admin yang bisa menambah/ubah data'); return; }
+  const id = $('inp_id').value.trim();
+  if(!id){ alert('ID wajib'); return; }
+  const existing = payments.findIndex(p=>p.id===id);
+  const obj = {
+    id,
+    nisn: $('inp_nisn').value.trim(),
+    student: $('inp_student').value.trim(),
+    class: $('inp_class').value.trim(),
+    amount_due: Number($('inp_due').value) || 0,
+    amount_paid: Number($('inp_paid').value) || 0,
+    date: $('inp_date').value || new Date().toISOString().slice(0,10),
+    note: $('inp_note').value.trim()
+  };
+  if(existing>=0){ payments[existing] = obj; }
+  else { payments.push(obj); }
+  saveToStorage(); renderTable($('search').value);
+  alert('Data tersimpan.');
+}
+
+function recordPayment(){
+  if(!isAdmin){ alert('Hanya admin'); return; }
+  const id = $('inp_id').value.trim();
+  if(!id){ alert('Masukkan ID terlebih dahulu'); return; }
+  const idx = payments.findIndex(p=>p.id===id);
+  if(idx<0){ alert('ID tidak ditemukan — buat data baru atau periksa kembali'); return; }
+  const add = Number($('inp_paid').value) || 0;
+  payments[idx].amount_paid = Number(payments[idx].amount_paid || 0) + add;
+  saveToStorage(); renderTable($('search').value);
+  alert('Pembayaran tercatat.');
+}
+
+function editRow(idx){
+  const p = payments[idx];
+  $('inp_id').value = p.id||'';
+  $('inp_nisn').value = p.nisn||'';
+  $('inp_student').value = p.student||'';
+  $('inp_class').value = p.class||'';
+  $('inp_due').value = p.amount_due||'';
+  $('inp_paid').value = p.amount_paid||'';
+  $('inp_date').value = p.date||'';
+  $('inp_note').value = p.note||'';
+}
+
+function deleteRow(idx){
+  if(!isAdmin){ alert('Hanya admin'); return; }
+  if(!confirm('Hapus data ini?')) return;
+  payments.splice(idx,1); saveToStorage(); renderTable($('search').value);
+}
+
+function clearAll(){
+  if(!isAdmin){ alert('Hanya admin'); return; }
+  if(!confirm('Hapus semua data? Tindakan tidak dapat dibatalkan.')) return;
+  payments = []; saveToStorage(); renderTable(); alert('Semua data dihapus.');
+}
+
+function printReceipt(){
+  if(!isAdmin){ alert('Hanya admin'); return; }
+  const id = $('inp_id').value.trim();
+  const idx = payments.findIndex(p=>p.id===id);
+  if(idx<0){ alert('ID tidak ditemukan'); return; }
+  const p = payments[idx];
+  const html = `<!doctype html><html><head><meta charset=\"utf-8\"><title>Kwitansi ${p.id}</title><style>body{font-family:Arial;padding:20px;color:#021}h2{margin:0}table{width:100%;margin-top:12px}td{padding:6px}</style></head><body><h2>Kwitansi Pembayaran</h2><div>Nama: <strong>${p.student}</strong></div><div>ID: ${p.id}</div><div>NISN: ${p.nisn||''}</div><div>Kelas: ${p.class}</div><table><tr><td>Jumlah Tagihan</td><td>${formatCurrency(p.amount_due)}</td></tr><tr><td>Terbayar</td><td>${formatCurrency(p.amount_paid)}</td></tr><tr><td>Tanggal</td><td>${p.date}</td></tr></table><div style=\"margin-top:20px\">Terima kasih.</div><script>window.print()</script></body></html>`;
+  const w = window.open('','_blank'); w.document.write(html); w.document.close();
+}
+
+// export
+function exportToExcel(){
+  const ws = XLSX.utils.json_to_sheet(payments);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Rekap');
+  downloadWorkbook(wb, 'rekap_pembayaran.xlsx');
+}
+
+// NISN search helper (exposed for quick calls)
+function searchByNISN(nisn){
+  const rows = document.querySelectorAll('#paymentsTable tbody tr');
+  rows.forEach(r=> r.style.display='');
+  if(!nisn) return;
+  rows.forEach(row=>{
+    const cell = row.querySelector('td[data-field=\"nisn\"]');
+    if(cell){ if(cell.textContent.trim() !== String(nisn).trim()) row.style.display='none'; }
+  });
+}
+
+// --- wiring UI ---
+window.addEventListener('DOMContentLoaded', ()=>{
+  $('year').textContent = new Date().getFullYear();
+  loadFromStorage(); renderTable(); updateMode();
+
+  $('importBtn').addEventListener('click', ()=>{
+    const f = $('fileInput').files[0]; if(!f){ alert('Pilih file Excel terlebih dahulu'); return; }
+    importFromFile(f);
+  });
+  $('exportBtn').addEventListener('click', exportToExcel);
+  $('loginBtn').addEventListener('click', enterAdmin);
+  $('logoutBtn').addEventListener('click', logoutAdmin);
+  $('addBtn').addEventListener('click', addOrUpdateFromForm);
+  $('payBtn').addEventListener('click', recordPayment);
+  $('clearBtn').addEventListener('click', ()=>{ if(confirm('Hapus semua data?')){ clearAll(); }});
+  $('printBtn').addEventListener('click', printReceipt);
+  $('search').addEventListener('input', (e)=> renderTable(e.target.value));
+
+  $('downloadTemplate').addEventListener('click', generateTemplate);
+  $('downloadSample').addEventListener('click', generateSample);
+
+  // set/change password
+  $('setPwdBtn').addEventListener('click', async ()=>{
+    const p = $('newPwd').value;
+    const pc = $('newPwdConfirm').value;
+    if(!p){ $('pwdMsg').textContent = 'Password kosong'; return; }
+    if(p!==pc){ $('pwdMsg').textContent = 'Password tidak cocok'; return; }
+    await setAdminPassword(p);
+    $('pwdMsg').textContent = 'Kata sandi tersimpan.'; $('newPwd').value=''; $('newPwdConfirm').value=''; updateMode();
+  });
+  $('clearPwdBtn').addEventListener('click', async ()=>{
+    if(confirm('Hapus kata sandi admin? Setelah ini admin tidak dapat login sampai kata sandi dibuat ulang.')){
+      await clearAdminPassword(); $('pwdMsg').textContent='Kata sandi dihapus.'; updateMode();
+    }
+  });
+
+  // public link hint
+  const repoHint = location.origin + location.pathname.replace(/index.html$/, '');
+  $('publicLink').textContent = repoHint;
+});
+</script>
+</body>
+</html>
